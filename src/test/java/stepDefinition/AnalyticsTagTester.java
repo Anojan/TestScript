@@ -3,15 +3,25 @@ package stepDefinition;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URL;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import org.drools.command.CommandFactory;
+import org.kie.api.runtime.ExecutionResults;
+import org.kie.internal.KnowledgeBase;
+import org.kie.internal.runtime.StatelessKnowledgeSession;
 import org.openqa.selenium.Proxy;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.remote.CapabilityType;
 import org.openqa.selenium.remote.DesiredCapabilities;
+
+import com.javacodegeeks.drools.DroolsDecisionTableExample;
+import com.javacodegeeks.drools.model.Analysis;
 
 import cucumber.api.java.en.And;
 import cucumber.api.java.en.Given;
@@ -34,6 +44,8 @@ public class AnalyticsTagTester {
 
 	public static WebDriver driver;
 	public static BrowserMobProxy proxy;
+	private static StatelessKnowledgeSession session;
+	String url = "http://www.asiaone.com//?adbypass=skinning_topspecial_topoverlay";
 
 	@Given("^I go to straitstimes Home Page$")
 	public void straitstimes_Home_Page() throws Throwable {
@@ -53,13 +65,14 @@ public class AnalyticsTagTester {
 		System.setProperty("webdriver.chrome.driver", driverPath + "chromedriver.exe");
 		driver = new ChromeDriver(capabilities);
 
-		// enable more detailed HAR capture, if desired (see CaptureType for the complete list)
+		// enable more detailed HAR capture, if desired (see CaptureType for the
+		// complete list)
 		proxy.enableHarCaptureTypes(CaptureType.REQUEST_CONTENT, CaptureType.RESPONSE_CONTENT);
 
 		// create a new HAR with the label "seleniumeasy.com"
 		proxy.newHar("straitstimes.com");
-		driver.get("http://www.asiaone.com//?adbypass=skinning_topspecial_topoverlay");
-		Thread.sleep(10);		
+		driver.get(url);
+		Thread.sleep(10);
 	}
 
 	@When("^I get the values from website$")
@@ -89,53 +102,84 @@ public class AnalyticsTagTester {
 	}
 
 	@And("^I compare the values with har entries$")
-	public static void logRequest() throws Exception {
-			System.out.println("at logRequest");
+	public void logRequest() throws Exception {
 
-			// FileOutputStream fos = new
-			// FileOutputStream("C:\\Users\\anojans\\Downloads\\SeleniumEasy.har");
-			HarReader harReader = new HarReader();
-			de.sstoehr.harreader.model.Har har = harReader
-					.readFromFile(new File("C:\\Users\\anojans\\Downloads\\SeleniumEasy.har"));
+		Analysis a = new Analysis();
+		a.setUrl(url);
+		a.setTags(getParameterPairs());
 
-			de.sstoehr.harreader.model.HarLog log = har.getLog();
-			List<de.sstoehr.harreader.model.HarEntry> entries = log.getEntries();
+		KnowledgeBase knowledgeBase = DroolsDecisionTableExample.createKnowledgeBaseFromSpreadsheet();
+		session = knowledgeBase.newStatelessKnowledgeSession();
+		session.execute(a);
+		
+//		ExecutionResults bresults =
+//				session.execute( CommandFactory.newInsert( a, "result" ) );
+//				Stilton stilton = bresults.getValue( "result" );
+		
+		
+		
+		
 
-			URI url = null;
-			for (de.sstoehr.harreader.model.HarEntry entry : entries) {
-				List<HarQueryParam> params = entry.getRequest().getQueryString();
-				boolean conti = false;
-				for (HarQueryParam harQueryParam : params) {
-					if (harQueryParam.getName().equals("debug"))
-						conti = true;
-				}
-				if (conti) continue;
-				url = new URI(entry.getRequest().getUrl());
-				if (url.getHost().contains("logw348.ati-host")) {
-					System.out.println(url);
-
-					System.out.println("Request found!");
-					List<HarHeader> headers = entry.getRequest().getHeaders();
-					System.out.println("Headers : ");
-					for (HarHeader pair : headers) {
-						System.out.println(pair.getName() + ":" + pair.getValue());
-					}
-
-					// System.out.println("status : " +
-					// entry.getResponse().getStatus());
-					// System.out.println(entry.getRequest().getUrl());
-					System.out.println("Parameters : ");
-					List<HarQueryParam> parameters = entry.getRequest().getQueryString();
-					for (HarQueryParam pair : parameters) {
-						System.out.println(pair.getName() + " : " + pair.getValue());
-					}
-				}
-			}
-		}
+	}
 
 	@Then("^I see the values are available as the same$")
 	public void verify_values_available() throws Throwable {
 
+	}
+
+	private static Map<String, String> getParameterPairs() throws Exception {
+		Map<String, String> paramPairs = new HashMap<String, String>();
+		System.out.println("at logRequest");
+
+		// FileOutputStream fos = new
+		// FileOutputStream("C:\\Users\\anojans\\Downloads\\SeleniumEasy.har");
+		HarReader harReader = new HarReader();
+		de.sstoehr.harreader.model.Har har = harReader
+				.readFromFile(new File("C:\\Users\\anojans\\Downloads\\SeleniumEasy.har"));
+
+		de.sstoehr.harreader.model.HarLog log = har.getLog();
+		List<de.sstoehr.harreader.model.HarEntry> entries = log.getEntries();
+
+		URI uri = null;
+		for (de.sstoehr.harreader.model.HarEntry entry : entries) {
+			List<HarQueryParam> params = entry.getRequest().getQueryString();
+
+			for (HarQueryParam harQueryParam : params) {
+				// if (harQueryParam.getName().equals("debug") ||
+				// harQueryParam.getName().equals("dbm_c") ||
+				// harQueryParam.getName().equals("anId") ||
+				// harQueryParam.getName().equals("creator"))
+
+				if (harQueryParam.getName().equals("vtag"))
+					break;
+
+			}
+			URL url = new URL(entry.getRequest().getUrl());
+		      String nullFragment = null;
+		       uri = new URI(url.getProtocol(), url.getHost(), url.getPath(), url.getQuery(), nullFragment);
+			
+			if (uri.getHost().contains("logw348.ati-host")) {
+				System.out.println(url);
+
+				System.out.println("Request found!");
+				List<HarHeader> headers = entry.getRequest().getHeaders();
+				System.out.println("Headers : ");
+				for (HarHeader pair : headers) {
+					System.out.println(pair.getName() + ":" + pair.getValue());
+				}
+
+				// System.out.println("status : " +
+				// entry.getResponse().getStatus());
+				// System.out.println(entry.getRequest().getUrl());
+				System.out.println("Parameters : ");
+				List<HarQueryParam> parameters = entry.getRequest().getQueryString();
+				for (HarQueryParam pair : parameters) {
+					paramPairs.put(pair.getName(), pair.getValue());
+					System.out.println(pair.getName() + " : " + pair.getValue());
+				}
+			}
+		}
+		return paramPairs;
 	}
 
 }
